@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Choose thermostats",
+        "description": "Select the thermostats you want to schedule. You can give each one its own heating times and temperatures in the Heating schedules panel.",
+        "data": {
+          "entity_ids": "Thermostats to schedule"
+        }
+      }
+    },
+    "error": {
+      "select_at_least_one": "Select at least one thermostat.",
+      "unsupported_entities": "These climate entities do not expose a target temperature: {entity_ids}."
+    },
+    "abort": {
+      "already_configured": "Simple Heating Schedule is already configured."
+    }
+  }
+}
