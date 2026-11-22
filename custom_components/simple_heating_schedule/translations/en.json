@@ -6,6 +6,9 @@
         "description": "Select the thermostats you want to schedule. You can give each one its own heating times and temperatures in the Heating schedules panel.",
         "data": {
           "entity_ids": "Thermostats to schedule"
+        },
+        "data_description": {
+          "entity_ids": "Choose one or more climate entities that support a target temperature."
         }
       }
     },

@@ -1,3 +1,104 @@
+const PANEL_TRANSLATIONS = {
+  en: {
+    menu: "Menu",
+    openMenu: "Open sidebar menu",
+    title: "Heating schedules",
+    thermostat: "Thermostat",
+    scheduleEnabled: "Schedule enabled",
+    weekday: "Weekday",
+    addTimes: "Add the times when this thermostat should change its target temperature.",
+    addChange: "Add temperature change",
+    copyTo: "Copy this day to",
+    copyDay: "Copy day",
+    save: "Save schedule",
+    discard: "Discard changes",
+    chartTitle: "Temperature through the day",
+    chartDescription: "This chart is a preview only. Edit setpoints using the list above.",
+    chartLabel: "Setpoint temperature over the selected day",
+    emptyDay: "No temperature changes for this day yet.",
+    at: "At ",
+    setTo: "set to ",
+    remove: "Remove",
+    chartEmpty: "Add a temperature change to preview the schedule.",
+    loadingError: "Could not load heating schedules.",
+    fullDay: "This day already has a change every hour. Remove one before adding another.",
+    copied: "Copied {source} to {target}. Save to apply the change.",
+    discarded: "Unsaved changes discarded.",
+    unsaved: "Unsaved changes.",
+    switchWarning: "Save or discard your unsaved changes before switching thermostats.",
+    saved: "Schedule saved.",
+    saveError: "Could not save this schedule.",
+    enableError: "Could not change the schedule state.",
+    enabled: "Schedule enabled. The current scheduled temperature was applied if one is configured.",
+    disabled: "Schedule disabled. The thermostat's current setpoint was left unchanged.",
+    invalidDays: "A schedule must contain all seven weekdays.",
+    invalidRows: "Each day must contain a list of temperature changes.",
+    invalidRow: "Each temperature change must have a time and temperature.",
+    invalidTime: "Times must use the 24-hour HH:MM format.",
+    duplicateTime: "Only one temperature change is allowed at {time}.",
+    invalidTemperature: "Temperatures must be numeric.",
+    temperatureRange: "Temperatures must be between -100 and 100 degrees.",
+    belowMinimum: "{temperature}° is below {entity}'s minimum temperature of {limit}°.",
+    aboveMaximum: "{temperature}° is above {entity}'s maximum temperature of {limit}°.",
+    invalidEnabled: "The enabled state must be true or false.",
+    notConfigured: "{entity} is not configured for heating schedules.",
+    unavailable: "{entity} is not currently available.",
+    unsupportedTemperature: "{entity} does not support a target temperature.",
+    applyError: "The current temperature could not be applied: {error}",
+    savedButApplyFailed: "Schedule saved, but {error}",
+    enabledButApplyFailed: "Schedule enabled, but {error}",
+  },
+  de: {
+    menu: "Menü",
+    openMenu: "Seitenmenü öffnen",
+    title: "Heizpläne",
+    thermostat: "Thermostat",
+    scheduleEnabled: "Zeitplan aktiviert",
+    weekday: "Wochentag",
+    addTimes: "Lege fest, wann dieses Thermostat seine Zieltemperatur ändern soll.",
+    addChange: "Temperaturänderung hinzufügen",
+    copyTo: "Diesen Tag kopieren nach",
+    copyDay: "Tag kopieren",
+    save: "Zeitplan speichern",
+    discard: "Änderungen verwerfen",
+    chartTitle: "Temperatur im Tagesverlauf",
+    chartDescription: "Diese Grafik dient nur zur Vorschau. Bearbeite die Werte in der Liste oben.",
+    chartLabel: "Zieltemperatur am ausgewählten Tag",
+    emptyDay: "Für diesen Tag sind noch keine Temperaturänderungen festgelegt.",
+    at: "Um ",
+    setTo: "einstellen auf ",
+    remove: "Entfernen",
+    chartEmpty: "Füge eine Temperaturänderung hinzu, um eine Vorschau zu sehen.",
+    loadingError: "Heizpläne konnten nicht geladen werden.",
+    fullDay: "Für diesen Tag gibt es bereits zu jeder Stunde eine Änderung. Entferne zuerst eine.",
+    copied: "{source} wurde nach {target} kopiert. Speichere, um die Änderung zu übernehmen.",
+    discarded: "Nicht gespeicherte Änderungen verworfen.",
+    unsaved: "Nicht gespeicherte Änderungen.",
+    switchWarning: "Speichere oder verwirf deine Änderungen, bevor du das Thermostat wechselst.",
+    saved: "Zeitplan gespeichert.",
+    saveError: "Der Zeitplan konnte nicht gespeichert werden.",
+    enableError: "Der Status des Zeitplans konnte nicht geändert werden.",
+    enabled: "Zeitplan aktiviert. Die aktuell geplante Temperatur wurde übernommen, sofern eine festgelegt ist.",
+    disabled: "Zeitplan deaktiviert. Die aktuelle Zieltemperatur des Thermostats bleibt unverändert.",
+    invalidDays: "Ein Zeitplan muss alle sieben Wochentage enthalten.",
+    invalidRows: "Für jeden Tag muss eine Liste von Temperaturänderungen angegeben werden.",
+    invalidRow: "Jede Temperaturänderung benötigt eine Uhrzeit und eine Temperatur.",
+    invalidTime: "Uhrzeiten müssen im 24-Stunden-Format HH:MM angegeben werden.",
+    duplicateTime: "Um {time} ist nur eine Temperaturänderung zulässig.",
+    invalidTemperature: "Temperaturen müssen numerisch sein.",
+    temperatureRange: "Temperaturen müssen zwischen -100 und 100 Grad liegen.",
+    belowMinimum: "{temperature}° liegt unter der Mindesttemperatur von {entity} ({limit}°).",
+    aboveMaximum: "{temperature}° liegt über der Höchsttemperatur von {entity} ({limit}°).",
+    invalidEnabled: "Der Aktivierungsstatus muss wahr oder falsch sein.",
+    notConfigured: "{entity} ist nicht für Heizpläne eingerichtet.",
+    unavailable: "{entity} ist derzeit nicht verfügbar.",
+    unsupportedTemperature: "{entity} unterstützt keine Zieltemperatur.",
+    applyError: "Die aktuelle Temperatur konnte nicht übernommen werden: {error}",
+    savedButApplyFailed: "Zeitplan gespeichert, aber {error}",
+    enabledButApplyFailed: "Zeitplan aktiviert, aber {error}",
+  },
+};
+
 class SimpleHeatingSchedulePanel extends HTMLElement {
   constructor() {
     super();
@@ -12,6 +113,19 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    const language = (hass.locale?.language || "en").toLowerCase().split("-")[0];
+    if (language !== this._language) {
+      this._language = language;
+      this._weekdays = Array.from({ length: 7 }, (_, index) =>
+        new Intl.DateTimeFormat(this._language, { weekday: "long", timeZone: "UTC" }).format(
+          new Date(Date.UTC(2026, 0, 5 + index)),
+        ),
+      );
+      if (this._ready) {
+        this._renderShell();
+        this._render();
+      }
+    }
     if (
       !this._ready &&
       !this._loading &&
@@ -56,8 +170,11 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         const options = timeZone
           ? { weekday: "long", timeZone }
           : { weekday: "long" };
-        const today = new Intl.DateTimeFormat("en-US", options).format(new Date());
-        this._selectedDay = Math.max(0, WEEKDAYS.indexOf(today));
+        const today = new Intl.DateTimeFormat(
+          this._language || "en",
+          options,
+        ).format(new Date());
+        this._selectedDay = Math.max(0, this._weekdays.indexOf(today));
         this._initialDaySet = true;
       }
       const entities = Object.keys(this._state.entities);
@@ -68,7 +185,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       this._ready = true;
       this._render();
     } catch (error) {
-      this._showStatus(error.message || "Could not load heating schedules.", true);
+      this._showStatus(this._backendMessage(error, "loadingError"), true);
     } finally {
       this._loading = false;
     }
@@ -119,36 +236,36 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       </style>
       <main>
         <header>
-          <button id="menu" class="menu secondary" type="button" aria-label="Open sidebar menu" hidden>Menu</button>
-          <h1>Heating schedules</h1>
+          <button id="menu" class="menu secondary" type="button" aria-label="${this._t("openMenu")}" hidden>${this._t("menu")}</button>
+          <h1>${this._t("title")}</h1>
         </header>
         <div class="toolbar">
-          <label>Thermostat<select id="entity"></select></label>
-          <label class="enabled"><input id="enabled" type="checkbox"><span>Schedule enabled</span></label>
+          <label>${this._t("thermostat")}<select id="entity"></select></label>
+          <label class="enabled"><input id="enabled" type="checkbox"><span>${this._t("scheduleEnabled")}</span></label>
         </div>
         <div id="status" class="status" role="status" aria-live="polite"></div>
-        <nav id="days" class="tabs" aria-label="Weekday"></nav>
+        <nav id="days" class="tabs" aria-label="${this._t("weekday")}"></nav>
         <section class="card">
           <h2 id="day-title"></h2>
-          <p class="muted">Add the times when this thermostat should change its target temperature.</p>
+          <p class="muted">${this._t("addTimes")}</p>
           <div id="rows"></div>
           <div class="actions">
-            <button id="add" class="secondary" type="button">Add temperature change</button>
+            <button id="add" class="secondary" type="button">${this._t("addChange")}</button>
           </div>
           <div class="copy-row" style="margin-top: 20px">
-            <label for="copy-target">Copy this day to</label>
+            <label for="copy-target">${this._t("copyTo")}</label>
             <select id="copy-target"></select>
-            <button id="copy" class="secondary" type="button">Copy day</button>
+            <button id="copy" class="secondary" type="button">${this._t("copyDay")}</button>
           </div>
           <div class="actions" style="margin-top: 20px">
-            <button id="save" type="button" disabled>Save schedule</button>
-            <button id="discard" class="secondary" type="button" disabled>Discard changes</button>
+            <button id="save" type="button" disabled>${this._t("save")}</button>
+            <button id="discard" class="secondary" type="button" disabled>${this._t("discard")}</button>
           </div>
         </section>
         <section class="card">
-          <h2>Temperature through the day</h2>
-          <p class="muted">This chart is a preview only. Edit setpoints using the list above.</p>
-          <svg id="chart" class="chart" viewBox="0 0 720 240" role="img" aria-label="Setpoint temperature over the selected day"></svg>
+          <h2>${this._t("chartTitle")}</h2>
+          <p class="muted">${this._t("chartDescription")}</p>
+          <svg id="chart" class="chart" viewBox="0 0 720 240" role="img" aria-label="${this._t("chartLabel")}"></svg>
           <p id="chart-empty" class="muted"></p>
         </section>
       </main>`;
@@ -178,7 +295,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
 
     const daysNav = this.shadowRoot.getElementById("days");
     daysNav.replaceChildren();
-    WEEKDAYS.forEach((day, index) => {
+    this._weekdays.forEach((day, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = index === this._selectedDay ? "selected" : "";
@@ -187,7 +304,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       daysNav.append(button);
     });
 
-    const dayName = WEEKDAYS[this._selectedDay];
+    const dayName = this._weekdays[this._selectedDay];
     this.shadowRoot.getElementById("day-title").textContent = dayName;
     const rows = this.shadowRoot.getElementById("rows");
     rows.replaceChildren();
@@ -197,13 +314,13 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     if ((this._draftDays?.[this._selectedDay] || []).length === 0) {
       const empty = document.createElement("p");
       empty.className = "muted";
-      empty.textContent = "No temperature changes for this day yet.";
+      empty.textContent = this._t("emptyDay");
       rows.append(empty);
     }
 
     const copyTarget = this.shadowRoot.getElementById("copy-target");
     copyTarget.replaceChildren();
-    WEEKDAYS.forEach((day, index) => {
+    this._weekdays.forEach((day, index) => {
       if (index === this._selectedDay) {
         return;
       }
@@ -225,7 +342,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     wrapper.dataset.row = index;
 
     const timeLabel = document.createElement("label");
-    timeLabel.textContent = "At ";
+    timeLabel.textContent = this._t("at");
     const time = document.createElement("input");
     time.type = "time";
     time.value = row.time;
@@ -234,7 +351,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     timeLabel.append(time);
 
     const temperatureLabel = document.createElement("label");
-    temperatureLabel.textContent = "set to ";
+    temperatureLabel.textContent = this._t("setTo");
     const temperature = document.createElement("input");
     temperature.type = "number";
     temperature.step = this._entityAttribute("target_temp_step", 0.5);
@@ -251,7 +368,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "danger";
-    remove.textContent = "Remove";
+    remove.textContent = this._t("remove");
     remove.dataset.remove = index;
     remove.setAttribute("aria-label", `Remove change at ${row.time}`);
 
@@ -301,8 +418,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       points.push({ minute: hour * 60 + minute, temperature: row.temperature });
     });
     if (points.length === 0) {
-      this.shadowRoot.getElementById("chart-empty").textContent =
-        "Add a temperature change to preview the schedule.";
+      this.shadowRoot.getElementById("chart-empty").textContent = this._t("chartEmpty");
       return;
     }
     this.shadowRoot.getElementById("chart-empty").textContent = "";
@@ -393,7 +509,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         attempts += 1;
       }
       if (attempts === 24) {
-        this._showStatus("This day already has a change every hour. Remove one before adding another.", true);
+        this._showStatus(this._t("fullDay"), true);
         return;
       }
       const time = `${String(Math.floor(nextMinute / 60)).padStart(2, "0")}:${String(
@@ -412,7 +528,10 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       }));
       this._markDirty();
       this._showStatus(
-        `Copied ${WEEKDAYS[this._selectedDay]} to ${WEEKDAYS[targetDay]}. Save to apply the change.`,
+        this._t("copied", {
+          source: this._weekdays[this._selectedDay],
+          target: this._weekdays[targetDay],
+        }),
       );
       this._render();
       return;
@@ -424,7 +543,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     if (target.id === "discard") {
       this._copySelectedDays();
       this._dirty = false;
-      this._showStatus("Unsaved changes discarded.");
+      this._showStatus(this._t("discarded"));
       this._render();
     }
   }
@@ -434,7 +553,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     if (target.id === "entity") {
       if (this._dirty) {
         target.value = this._selectedEntity;
-        this._showStatus("Save or discard your unsaved changes before switching thermostats.", true);
+        this._showStatus(this._t("switchWarning"), true);
         return;
       }
       this._selectedEntity = target.value;
@@ -474,7 +593,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
 
   _markDirty() {
     this._dirty = true;
-    this._showStatus("Unsaved changes.");
+    this._showStatus(this._t("unsaved"));
     this.shadowRoot.getElementById("save").disabled = false;
     this.shadowRoot.getElementById("discard").disabled = false;
   }
@@ -513,10 +632,13 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       this._state = result;
       this._dirty = false;
       this._copySelectedDays();
-      this._showStatus(result.warning || "Schedule saved.", Boolean(result.warning));
+      this._showStatus(
+        result.warning ? this._backendMessage(result.warning) : this._t("saved"),
+        Boolean(result.warning),
+      );
       this._render();
     } catch (error) {
-      this._showStatus(error.message || "Could not save this schedule.", true);
+      this._showStatus(this._backendMessage(error, "saveError"), true);
     }
   }
 
@@ -529,15 +651,15 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       });
       this._state = result;
       this._showStatus(
-        result.warning ||
+        (result.warning && this._backendMessage(result.warning)) ||
           (enabled
-            ? "Schedule enabled. The current scheduled temperature was applied if one is configured."
-            : "Schedule disabled. The thermostat's current setpoint was left unchanged."),
+            ? this._t("enabled")
+            : this._t("disabled")),
         Boolean(result.warning),
       );
       this._render();
     } catch (error) {
-      this._showStatus(error.message || "Could not change the schedule state.", true);
+      this._showStatus(this._backendMessage(error, "enableError"), true);
       this._render();
     }
   }
@@ -549,16 +671,75 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       status.classList.toggle("error", isError);
     }
   }
-}
 
-const WEEKDAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
+  _t(key, replacements = {}) {
+    const language = PANEL_TRANSLATIONS[this._language] ? this._language : "en";
+    return Object.entries(replacements).reduce(
+      (text, [name, value]) => text.replaceAll(`{${name}}`, value),
+      PANEL_TRANSLATIONS[language][key],
+    );
+  }
+
+  _backendMessage(error, fallback) {
+    let message = typeof error === "string" ? error : error?.message || "";
+    message = message.replace(/^(invalid_schedule|schedule_error):\s*/, "");
+    const simpleErrors = [
+      ["A schedule must contain all seven weekdays.", "invalidDays"],
+      ["Each day must contain a list of setpoint changes.", "invalidRows"],
+      ["Each setpoint change must have a time and temperature.", "invalidRow"],
+      ["Times must use the 24-hour HH:MM format.", "invalidTime"],
+      ["Temperatures must be numeric.", "invalidTemperature"],
+      ["Temperatures must be between -100 and 100 degrees.", "temperatureRange"],
+      ["The enabled state must be true or false.", "invalidEnabled"],
+    ];
+    for (const [source, key] of simpleErrors) {
+      if (message.includes(source)) {
+        return this._t(key);
+      }
+    }
+
+    let match = message.match(/Only one setpoint change is allowed at ([0-9:]+)\./);
+    if (match) {
+      return this._t("duplicateTime", { time: match[1] });
+    }
+    match = message.match(/^(-?\d+(?:\.\d+)?)° is below (.+)'s minimum temperature of (-?\d+(?:\.\d+)?)°\./);
+    if (match) {
+      return this._t("belowMinimum", {
+        temperature: match[1],
+        entity: match[2],
+        limit: match[3],
+      });
+    }
+    match = message.match(/^(-?\d+(?:\.\d+)?)° is above (.+)'s maximum temperature of (-?\d+(?:\.\d+)?)°\./);
+    if (match) {
+      return this._t("aboveMaximum", {
+        temperature: match[1],
+        entity: match[2],
+        limit: match[3],
+      });
+    }
+    match = message.match(/^(.+) is not configured for heating schedules\.$/);
+    if (match) {
+      return this._t("notConfigured", { entity: match[1] });
+    }
+    match = message.match(/^(.+) is not currently available\.$/);
+    if (match) {
+      return this._t("unavailable", { entity: match[1] });
+    }
+    match = message.match(/^(.+) does not support a target temperature\.$/);
+    if (match) {
+      return this._t("unsupportedTemperature", { entity: match[1] });
+    }
+    match = message.match(/^(Schedule saved|Schedule enabled), but the current setpoint could not be applied: (.+)$/);
+    if (match) {
+      const errorText = this._backendMessage(match[2]) || this._t("applyError", { error: match[2] });
+      return this._t(
+        match[1] === "Schedule saved" ? "savedButApplyFailed" : "enabledButApplyFailed",
+        { error: errorText },
+      );
+    }
+    return message || this._t(fallback || "saveError");
+  }
+}
 
 customElements.define("simple-heating-schedule-panel", SimpleHeatingSchedulePanel);

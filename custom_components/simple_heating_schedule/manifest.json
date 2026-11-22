@@ -4,7 +4,8 @@
   "codeowners": ["@dinariox"],
   "config_flow": true,
   "dependencies": ["http", "panel_custom", "websocket_api"],
-  "documentation": "https://github.com/dinariox/ha-simple-heating-schedule/README.md",
+  "documentation": "https://github.com/dinariox/ha-simple-heating-schedule/blob/main/README.md",
+  "issue_tracker": "https://github.com/dinariox/ha-simple-heating-schedule/issues",
   "iot_class": "local_push",
   "requirements": [],
   "version": "0.1.0"

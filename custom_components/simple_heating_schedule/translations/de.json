@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Thermostate auswählen",
+        "description": "Wähle die Thermostate aus, für die du Zeitpläne erstellen möchtest. Für jedes Thermostat kannst du im Bereich „Heizpläne“ eigene Heizzeiten und Temperaturen festlegen.",
+        "data": {
+          "entity_ids": "Zu planende Thermostate"
+        },
+        "data_description": {
+          "entity_ids": "Wähle ein oder mehrere Klimageräte mit einstellbarer Zieltemperatur aus."
+        }
+      }
+    },
+    "error": {
+      "select_at_least_one": "Wähle mindestens ein Thermostat aus.",
+      "unsupported_entities": "Diese Klimageräte unterstützen keine Zieltemperatur: {entity_ids}."
+    },
+    "abort": {
+      "already_configured": "Simple Heating Schedule ist bereits eingerichtet."
+    }
+  }
+}

@@ -13,9 +13,9 @@ A Home Assistant custom integration for managing a weekly heating schedule for e
 
 ## Installation
 
-Install **Simple Heating Schedule** as a custom repository in HACS, then restart Home Assistant. Alternatively, copy `custom_components/simple_heating_schedule` into the `custom_components` directory in your Home Assistant configuration and restart.
+Install **Simple Heating Schedule** from the Home Assistant Marketplace, then restart Home Assistant. Alternatively, copy `custom_components/simple_heating_schedule` into the `custom_components` directory in your Home Assistant configuration and restart.
 
-In Home Assistant, go to **Settings → Devices & services → Add integration**, search for **Simple Heating Schedule**, and select the climate entities to manage. The **Heating schedules** panel will appear in the sidebar.
+In Home Assistant, go to **Settings → Devices & services → Add integration**, search for **Simple Heating Schedule**, and select the climate entities to manage. The setup dialog explains that each selected thermostat can have its own weekly schedule. The **Heating schedules** panel will appear in the sidebar.
 
 ## Using schedules
 
@@ -24,7 +24,7 @@ Select a thermostat and weekday, then add the times and target temperatures for 
 Each schedule is enabled independently. While enabled, the integration applies the active scheduled setpoint at startup and when saving or enabling a schedule, then applies each later change at its scheduled local time. If someone adjusts the thermostat manually, that setpoint is not changed again until the next scheduled change. When disabled, the integration sends no scheduled temperature commands and leaves the current setpoint unchanged.
 
 New schedules start empty and do not send a setpoint until a temperature change has been added.
-Climate entities must support a target temperature. Temperature limits advertised by an entity are enforced when saving its schedule.
+Climate entities must support a target temperature. Temperature limits advertised by an entity are enforced when saving its schedule. The setup flow and panel are available in English and German; the panel follows the Home Assistant language.
 
 
 ## Development
