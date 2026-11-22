@@ -12,9 +12,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (this._ready && !this._dirty) {
-      this._render();
-    } else if (
+    if (
       !this._ready &&
       !this._loading &&
       this.isConnected &&
