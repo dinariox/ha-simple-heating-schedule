@@ -6,6 +6,7 @@ from homeassistant.components import frontend
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.panel_custom import async_register_panel
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.typing import ConfigType
@@ -62,6 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data.pop(DOMAIN, None)
         raise
     await manager.async_start()
+    await hass.config_entries.async_forward_entry_setups(entry, [Platform.SWITCH])
     return True
 
 
@@ -69,6 +71,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a configured schedule manager."""
     manager: ScheduleManager = hass.data[DOMAIN]
     await manager.async_stop()
+    await hass.config_entries.async_unload_platforms(entry, [Platform.SWITCH])
     hass.data.pop(DOMAIN)
     frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
     return True

@@ -17,6 +17,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_get_schedules)
     websocket_api.async_register_command(hass, websocket_set_schedule)
     websocket_api.async_register_command(hass, websocket_set_enabled)
+    websocket_api.async_register_command(hass, websocket_set_global_enabled)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/get"})
@@ -75,6 +76,31 @@ async def websocket_set_enabled(
         result = await manager.async_set_enabled(
             msg["entity_id"], msg["enabled"]
         )
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_schedule", str(err))
+        return
+    except (HomeAssistantError, OSError) as err:
+        connection.send_error(msg["id"], "schedule_error", str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/set_global_enabled",
+        vol.Required("enabled"): bool,
+    }
+)
+@websocket_api.async_response
+async def websocket_set_global_enabled(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Enable or disable heating schedules globally."""
+    manager = _get_manager(hass, connection, msg)
+    if manager is None:
+        return
+    try:
+        result = await manager.async_set_global_enabled(msg["enabled"])
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_schedule", str(err))
         return

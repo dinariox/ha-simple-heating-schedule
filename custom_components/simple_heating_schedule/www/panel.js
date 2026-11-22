@@ -10,6 +10,10 @@ const PANEL_TRANSLATIONS = {
     scheduleOff: "Schedule paused",
     manualOverrideHint: "Manual changes last until the next scheduled change",
     pausedHint: "The current temperature is left unchanged while paused",
+    globalSchedules: "All heating schedules",
+    globalEnabled: "Enabled",
+    globalPaused: "Paused",
+    globalDescription: "Turn all schedules on or pause them together",
     currentTarget: "Current target",
     temperatureUnavailable: "Temperature unavailable",
     weekday: "Weekday",
@@ -73,6 +77,10 @@ const PANEL_TRANSLATIONS = {
     scheduleOff: "Zeitplan pausiert",
     manualOverrideHint: "Manuelle Änderungen gelten bis zur nächsten geplanten Änderung",
     pausedHint: "Während der Pause bleibt die aktuelle Temperatur unverändert",
+    globalSchedules: "Alle Heizpläne",
+    globalEnabled: "Aktiv",
+    globalPaused: "Pausiert",
+    globalDescription: "Aktiviere alle Zeitpläne zusammen oder pausiere sie",
     currentTarget: "Aktuelle Zieltemperatur",
     temperatureUnavailable: "Temperatur nicht verfügbar",
     weekday: "Wochentag",
@@ -257,6 +265,10 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         select, input { min-height: 44px; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 12px; color: var(--primary-text-color); background: var(--schedule-card); }
         select { cursor: pointer; }
         .device-card, .card { border: 1px solid var(--divider-color); border-radius: 18px; background: var(--schedule-card); box-shadow: 0 3px 14px rgba(0, 0, 0, .035); }
+        .global-control { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 12px; border: 1px solid var(--divider-color); border-radius: 16px; padding: 14px 16px; background: var(--schedule-card); }
+        .global-copy { display: grid; gap: 2px; }
+        .global-copy strong { font-size: .95rem; }
+        .global-copy span { color: var(--secondary-text-color); font-size: .82rem; }
         .device-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; }
         .device-picker { display: grid; min-width: min(100%, 360px); gap: 6px; }
         .current-target { display: flex; align-items: baseline; gap: 7px; color: var(--secondary-text-color); font-size: .82rem; }
@@ -318,6 +330,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         .muted { color: var(--secondary-text-color); }
         @media (max-width: 680px) {
           main { padding: 20px 14px 36px; }
+          .global-control { align-items: flex-start; gap: 12px; }
           .device-card { align-items: flex-start; flex-direction: column; gap: 15px; padding: 16px; }
           .device-picker { width: 100%; }
           .enabled { align-self: stretch; }
@@ -355,6 +368,10 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
           </div>
           <div><h1>${this._t("title")}</h1><p class="intro">${this._t("intro")}</p></div>
         </header>
+        <section class="global-control" aria-label="${this._t("globalSchedules")}">
+          <span class="global-copy"><strong>${this._t("globalSchedules")}</strong><span>${this._t("globalDescription")}</span></span>
+          <label class="enabled"><input id="global-enabled" type="checkbox"><span class="enabled-copy"><strong id="global-enabled-title"></strong></span></label>
+        </section>
         <section class="device-card" aria-label="${this._t("thermostat")}">
           <label class="device-picker"><span class="field-label">${this._t("thermostat")}</span><select id="entity"></select><span class="current-target"><span id="current-target-label"></span><strong id="current-target-value"></strong></span></label>
           <label class="enabled"><input id="enabled" type="checkbox"><span class="enabled-copy"><strong id="enabled-title"></strong><span id="enabled-subtitle"></span></span></label>
@@ -417,7 +434,12 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     const schedule = entities[this._selectedEntity];
     const enabled = this.shadowRoot.getElementById("enabled");
     enabled.checked = schedule?.enabled || false;
-    enabled.disabled = !schedule;
+    enabled.disabled = !schedule || !this._state.global_enabled;
+    const globalEnabled = this.shadowRoot.getElementById("global-enabled");
+    globalEnabled.checked = this._state.global_enabled !== false;
+    this.shadowRoot.getElementById("global-enabled-title").textContent = this._t(
+      globalEnabled.checked ? "globalEnabled" : "globalPaused",
+    );
     this.shadowRoot.getElementById("enabled-title").textContent = this._t(
       schedule?.enabled ? "scheduleOn" : "scheduleOff",
     );
@@ -721,6 +743,10 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
 
   _handleChange(event) {
     const target = event.target;
+    if (target.id === "global-enabled") {
+      this._setGlobalEnabled(target.checked);
+      return;
+    }
     if (target.id === "entity") {
       if (this._dirty) {
         target.value = this._selectedEntity;
@@ -826,6 +852,26 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
           (enabled
             ? this._t("enabled")
             : this._t("disabled")),
+        Boolean(result.warning),
+      );
+      this._render();
+    } catch (error) {
+      this._showStatus(this._backendMessage(error, "enableError"), true);
+      this._render();
+    }
+  }
+
+  async _setGlobalEnabled(enabled) {
+    try {
+      const result = await this._hass.callWS({
+        type: "simple_heating_schedule/set_global_enabled",
+        enabled,
+      });
+      this._state = result;
+      this._showStatus(
+        result.warning
+          ? this._backendMessage(result.warning)
+          : this._t(enabled ? "globalEnabled" : "globalPaused"),
         Boolean(result.warning),
       );
       this._render();

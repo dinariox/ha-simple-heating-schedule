@@ -27,7 +27,9 @@ class ScheduleManager:
         self.entity_ids: list[str] = entry.data[CONF_ENTITY_IDS]
         self.store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}")
         self.schedules: dict[str, dict[str, Any]] = {}
+        self.global_enabled = True
         self._unsubscribe_time: Any = None
+        self._switch_entities: list[Any] = []
 
     async def async_load(self) -> None:
         """Load stored schedules and initialize newly selected thermostats."""
@@ -38,6 +40,10 @@ class ScheduleManager:
         stored_entities = saved.get("entities", {}) if saved is not None else {}
         if not isinstance(stored_entities, dict):
             raise HomeAssistantError("Stored heating schedules have an invalid format.")
+        global_enabled = saved.get("global_enabled", True) if saved is not None else True
+        if not isinstance(global_enabled, bool):
+            raise HomeAssistantError("The stored global schedule state is invalid.")
+        self.global_enabled = global_enabled
 
         for entity_id in self.entity_ids:
             stored = stored_entities.get(entity_id)
@@ -71,9 +77,23 @@ class ScheduleManager:
             self._unsubscribe_time()
             self._unsubscribe_time = None
 
+    def register_switch_entity(self, entity: Any) -> None:
+        """Register the global switch entity for state updates."""
+        self._switch_entities.append(entity)
+
+    def unregister_switch_entity(self, entity: Any) -> None:
+        """Unregister the global switch entity."""
+        if entity in self._switch_entities:
+            self._switch_entities.remove(entity)
+
+    def _notify_switch_entities(self) -> None:
+        for entity in self._switch_entities:
+            entity.async_write_ha_state()
+
     async def async_get_state(self) -> dict[str, Any]:
         """Return a copy of all schedules for the panel."""
         return {
+            "global_enabled": self.global_enabled,
             "entities": {
                 entity_id: {
                     "enabled": schedule["enabled"],
@@ -102,7 +122,7 @@ class ScheduleManager:
             raise
 
         warning = None
-        if self.schedules[entity_id]["enabled"]:
+        if self.global_enabled and self.schedules[entity_id]["enabled"]:
             temperature = current_temperature(days, dt_util.now())
             if temperature is not None:
                 try:
@@ -127,7 +147,7 @@ class ScheduleManager:
             self.schedules[entity_id]["enabled"] = previous_enabled
             raise
         warning = None
-        if enabled:
+        if self.global_enabled and enabled:
             temperature = current_temperature(
                 self.schedules[entity_id]["days"], dt_util.now()
             )
@@ -138,6 +158,40 @@ class ScheduleManager:
                     warning = f"Schedule enabled, but the current setpoint could not be applied: {err}"
         return await self._state_with_warning(warning)
 
+    async def async_set_global_enabled(self, enabled: bool) -> dict[str, Any]:
+        """Enable or disable schedules globally."""
+        if not isinstance(enabled, bool):
+            raise ValueError("The enabled state must be true or false.")
+
+        previous_enabled = self.global_enabled
+        self.global_enabled = enabled
+        try:
+            await self._async_save()
+        except (HomeAssistantError, OSError):
+            self.global_enabled = previous_enabled
+            raise
+
+        warning = None
+        if enabled:
+            now = dt_util.now()
+            for entity_id, schedule in self.schedules.items():
+                if not schedule["enabled"]:
+                    continue
+                temperature = current_temperature(schedule["days"], now)
+                if temperature is None:
+                    continue
+                try:
+                    await self._async_apply_temperature(entity_id, temperature)
+                except HomeAssistantError as err:
+                    warning = (
+                        f"Heating schedules enabled, but {entity_id}'s "
+                        f"setpoint could not be applied: {err}"
+                    )
+                    break
+
+        self._notify_switch_entities()
+        return await self._state_with_warning(warning)
+
     async def _state_with_warning(self, warning: str | None) -> dict[str, Any]:
         state = await self.async_get_state()
         if warning is not None:
@@ -145,7 +199,9 @@ class ScheduleManager:
         return state
 
     async def _async_save(self) -> None:
-        await self.store.async_save({"entities": self.schedules})
+        await self.store.async_save(
+            {"global_enabled": self.global_enabled, "entities": self.schedules}
+        )
 
     def _require_entity(self, entity_id: str) -> None:
         if entity_id not in self.schedules:
@@ -205,6 +261,8 @@ class ScheduleManager:
         )
 
     async def _async_apply_current_schedules(self) -> None:
+        if not self.global_enabled:
+            return
         now = dt_util.now()
         for entity_id, schedule in self.schedules.items():
             if not schedule["enabled"]:
@@ -219,6 +277,8 @@ class ScheduleManager:
 
     async def _async_handle_time_change(self, now: datetime) -> None:
         """Apply only changes scheduled for this minute."""
+        if not self.global_enabled:
+            return
         for entity_id, schedule in self.schedules.items():
             if not schedule["enabled"]:
                 continue

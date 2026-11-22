@@ -19,5 +19,12 @@
     "abort": {
       "already_configured": "Simple Heating Schedule ist bereits eingerichtet."
     }
+  },
+  "entity": {
+    "switch": {
+      "heating_schedules": {
+        "name": "Heizpläne"
+      }
+    }
   }
 }
