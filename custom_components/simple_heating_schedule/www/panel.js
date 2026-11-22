@@ -25,6 +25,10 @@ const PANEL_TRANSLATIONS = {
     addChange: "Add temperature change",
     copyTo: "Copy this day to",
     copyDay: "Copy day",
+    copyTitle: "Copy {day}",
+    copyDescription: "Choose the day that should receive this schedule.",
+    copyConfirm: "Copy schedule",
+    cancel: "Cancel",
     save: "Save schedule",
     discard: "Discard changes",
     chartTitle: "Temperature through the day",
@@ -92,6 +96,10 @@ const PANEL_TRANSLATIONS = {
     addChange: "Temperaturänderung hinzufügen",
     copyTo: "Diesen Tag kopieren nach",
     copyDay: "Tag kopieren",
+    copyTitle: "{day} kopieren",
+    copyDescription: "Wähle den Tag aus, der diesen Zeitplan erhalten soll.",
+    copyConfirm: "Zeitplan kopieren",
+    cancel: "Abbrechen",
     save: "Zeitplan speichern",
     discard: "Änderungen verwerfen",
     chartTitle: "Temperatur im Tagesverlauf",
@@ -259,8 +267,9 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         button:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
         button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid color-mix(in srgb, var(--schedule-accent) 45%, transparent); outline-offset: 2px; }
         button.secondary { color: var(--primary-text-color); background: var(--schedule-soft); }
-        button.danger { min-height: 38px; padding: 7px 11px; color: var(--secondary-text-color); background: transparent; }
-        button.danger:hover:not(:disabled) { color: var(--error-color, #b3261e); background: var(--schedule-soft); }
+        button.danger { min-height: 38px; width: 38px; padding: 8px; color: var(--error-color, #b3261e); background: transparent; }
+        button.danger svg { width: 18px; height: 18px; }
+        button.danger:hover:not(:disabled) { color: var(--text-primary-color, #fff); background: var(--error-color, #b3261e); }
         button:disabled { opacity: .48; cursor: default; transform: none; }
         select, input { min-height: 44px; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 12px; color: var(--primary-text-color); background: var(--schedule-card); }
         select { cursor: pointer; }
@@ -316,6 +325,13 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         .copy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 19px; border-top: 1px solid var(--divider-color); padding-top: 17px; }
         .copy-row label { color: var(--secondary-text-color); font-size: .9rem; }
         .copy-row select { min-width: 160px; }
+        dialog { width: min(440px, calc(100vw - 28px)); border: 1px solid var(--divider-color); border-radius: 18px; padding: 0; color: var(--primary-text-color); background: var(--schedule-card); box-shadow: 0 18px 50px rgba(0, 0, 0, .28); }
+        dialog::backdrop { background: rgba(0, 0, 0, .48); backdrop-filter: blur(2px); }
+        .modal { display: grid; gap: 18px; padding: 22px; }
+        .modal h2 { font-size: 1.25rem; }
+        .modal p { margin: 5px 0 0; color: var(--secondary-text-color); }
+        .modal select { width: 100%; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
         .save-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; border-top: 1px solid var(--divider-color); padding-top: 17px; }
         .save-row .save-note { flex: 1; color: var(--secondary-text-color); font-size: .87rem; }
         .chart-card { overflow: hidden; }
@@ -331,6 +347,8 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         @media (max-width: 680px) {
           main { padding: 20px 14px 36px; }
           .global-control { align-items: flex-start; gap: 12px; }
+          .modal-actions { flex-direction: column-reverse; }
+          .modal-actions button { width: 100%; }
           .device-card { align-items: flex-start; flex-direction: column; gap: 15px; padding: 16px; }
           .device-picker { width: 100%; }
           .enabled { align-self: stretch; }
@@ -378,6 +396,11 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         </section>
         <div id="status" class="status" role="status" aria-live="polite"></div>
         <nav id="days" class="tabs" aria-label="${this._t("weekday")}"></nav>
+        <section class="card chart-card">
+          <div class="chart-head"><div><h2>${this._t("chartTitle")}</h2></div><span class="preview-badge">${this._t("preview")}</span></div>
+          <div class="chart-wrap"><svg id="chart" class="chart" viewBox="0 0 720 240" role="img" aria-label="${this._t("chartLabel")}"></svg></div>
+          <p id="chart-empty" class="muted"></p>
+        </section>
         <section class="card">
           <div class="section-head">
             <div><h2 id="day-title"></h2><p>${this._t("addTimes")}</p></div>
@@ -386,10 +409,6 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
           <div id="rows" class="rows"></div>
           <div class="editor-actions">
             <button id="add" class="secondary" type="button"><span aria-hidden="true">＋</span>${this._t("addChange")}</button>
-          </div>
-          <div class="copy-row">
-            <label for="copy-target">${this._t("copyTo")}</label>
-            <select id="copy-target"></select>
             <button id="copy" class="secondary" type="button">${this._t("copyDay")}</button>
           </div>
           <div class="save-row">
@@ -398,11 +417,16 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
             <button id="discard" class="secondary" type="button" disabled>${this._t("discard")}</button>
           </div>
         </section>
-        <section class="card chart-card">
-          <div class="chart-head"><div><h2>${this._t("chartTitle")}</h2><p>${this._t("chartDescription")}</p></div><span class="preview-badge">${this._t("preview")}</span></div>
-          <div class="chart-wrap"><svg id="chart" class="chart" viewBox="0 0 720 240" role="img" aria-label="${this._t("chartLabel")}"></svg></div>
-          <p id="chart-empty" class="muted"></p>
-        </section>
+        <dialog id="copy-dialog" aria-labelledby="copy-dialog-title">
+          <div class="modal">
+            <div><h2 id="copy-dialog-title"></h2><p id="copy-dialog-description"></p></div>
+            <label class="device-picker"><span class="field-label">${this._t("weekday")}</span><select id="copy-target"></select></label>
+            <div class="modal-actions">
+              <button id="copy-cancel" class="secondary" type="button">${this._t("cancel")}</button>
+              <button id="copy-confirm" type="button">${this._t("copyConfirm")}</button>
+            </div>
+          </div>
+        </dialog>
       </main>`;
   }
 
@@ -501,6 +525,13 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     copyTarget.disabled = !schedule;
     this.shadowRoot.getElementById("add").disabled = !schedule;
     this.shadowRoot.getElementById("copy").disabled = !schedule;
+    this.shadowRoot.getElementById("copy-confirm").disabled = !schedule;
+    this.shadowRoot.getElementById("copy-dialog-title").textContent = this._t(
+      "copyTitle",
+      { day: dayName },
+    );
+    this.shadowRoot.getElementById("copy-dialog-description").textContent =
+      this._t("copyDescription");
     this.shadowRoot.getElementById("save").disabled = !schedule || !this._dirty;
     this.shadowRoot.getElementById("discard").disabled = !this._dirty;
     this.shadowRoot.getElementById("save-note").textContent = this._t(
@@ -550,7 +581,8 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "danger";
-    remove.textContent = this._t("remove");
+    remove.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>';
     remove.dataset.remove = index;
     remove.setAttribute(
       "aria-label",
@@ -715,7 +747,21 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       return;
     }
     if (target.id === "copy") {
+      const dialog = this.shadowRoot.getElementById("copy-dialog");
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+      return;
+    }
+    if (target.id === "copy-cancel") {
+      this.shadowRoot.getElementById("copy-dialog").close();
+      return;
+    }
+    if (target.id === "copy-confirm") {
       const targetDay = Number(this.shadowRoot.getElementById("copy-target").value);
+      this.shadowRoot.getElementById("copy-dialog").close();
       this._draftDays[targetDay] = this._draftDays[this._selectedDay].map((row) => ({
         ...row,
       }));
