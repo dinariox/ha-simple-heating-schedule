@@ -3,9 +3,20 @@ const PANEL_TRANSLATIONS = {
     menu: "Menu",
     openMenu: "Open sidebar menu",
     title: "Heating schedules",
+    intro: "Set a comfortable temperature for every part of your day.",
     thermostat: "Thermostat",
     scheduleEnabled: "Schedule enabled",
+    scheduleOn: "Schedule on",
+    scheduleOff: "Schedule paused",
+    manualOverrideHint: "Manual changes last until the next scheduled change",
+    pausedHint: "The current temperature is left unchanged while paused",
+    currentTarget: "Current target",
+    temperatureUnavailable: "Temperature unavailable",
     weekday: "Weekday",
+    changesCount: "{count} changes",
+    changeCount: "{count} change",
+    savedState: "All changes saved",
+    unsavedState: "You have unsaved changes",
     addTimes: "Add the times when this thermostat should change its target temperature.",
     addChange: "Add temperature change",
     copyTo: "Copy this day to",
@@ -15,7 +26,10 @@ const PANEL_TRANSLATIONS = {
     chartTitle: "Temperature through the day",
     chartDescription: "This chart is a preview only. Edit setpoints using the list above.",
     chartLabel: "Setpoint temperature over the selected day",
+    preview: "Preview",
+    removeChange: "Remove change at {time}",
     emptyDay: "No temperature changes for this day yet.",
+    emptyHint: "Start with the time you wake up, then add changes for later in the day.",
     at: "At ",
     setTo: "set to ",
     remove: "Remove",
@@ -52,9 +66,20 @@ const PANEL_TRANSLATIONS = {
     menu: "Menü",
     openMenu: "Seitenmenü öffnen",
     title: "Heizpläne",
+    intro: "Stelle für jeden Tagesabschnitt deine Wohlfühltemperatur ein.",
     thermostat: "Thermostat",
     scheduleEnabled: "Zeitplan aktiviert",
+    scheduleOn: "Zeitplan aktiv",
+    scheduleOff: "Zeitplan pausiert",
+    manualOverrideHint: "Manuelle Änderungen gelten bis zur nächsten geplanten Änderung",
+    pausedHint: "Während der Pause bleibt die aktuelle Temperatur unverändert",
+    currentTarget: "Aktuelle Zieltemperatur",
+    temperatureUnavailable: "Temperatur nicht verfügbar",
     weekday: "Wochentag",
+    changesCount: "{count} Änderungen",
+    changeCount: "{count} Änderung",
+    savedState: "Alle Änderungen gespeichert",
+    unsavedState: "Du hast ungespeicherte Änderungen",
     addTimes: "Lege fest, wann dieses Thermostat seine Zieltemperatur ändern soll.",
     addChange: "Temperaturänderung hinzufügen",
     copyTo: "Diesen Tag kopieren nach",
@@ -64,7 +89,10 @@ const PANEL_TRANSLATIONS = {
     chartTitle: "Temperatur im Tagesverlauf",
     chartDescription: "Diese Grafik dient nur zur Vorschau. Bearbeite die Werte in der Liste oben.",
     chartLabel: "Zieltemperatur am ausgewählten Tag",
+    preview: "Vorschau",
+    removeChange: "Änderung um {time} entfernen",
     emptyDay: "Für diesen Tag sind noch keine Temperaturänderungen festgelegt.",
+    emptyHint: "Beginne mit deiner Aufstehzeit und füge danach weitere Änderungen für den Tag hinzu.",
     at: "Um ",
     setTo: "einstellen auf ",
     remove: "Entfernen",
@@ -118,6 +146,11 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       this._language = language;
       this._weekdays = Array.from({ length: 7 }, (_, index) =>
         new Intl.DateTimeFormat(this._language, { weekday: "long", timeZone: "UTC" }).format(
+          new Date(Date.UTC(2026, 0, 5 + index)),
+        ),
+      );
+      this._shortWeekdays = Array.from({ length: 7 }, (_, index) =>
+        new Intl.DateTimeFormat(this._language, { weekday: "short", timeZone: "UTC" }).format(
           new Date(Date.UTC(2026, 0, 5 + index)),
         ),
       );
@@ -194,78 +227,163 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
   _renderShell() {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; color: var(--primary-text-color); font-family: var(--paper-font-body1_-_font-family, sans-serif); }
-        main { box-sizing: border-box; max-width: 1000px; margin: 0 auto; padding: 28px 20px 48px; }
-        header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-        h1 { font-size: 1.8rem; margin: 0; }
+        :host {
+          --schedule-accent: var(--primary-color, #03a9f4);
+          --schedule-card: var(--card-background-color, var(--primary-background-color, #fff));
+          --schedule-soft: var(--secondary-background-color, #f3f5f7);
+          display: block;
+          color: var(--primary-text-color);
+          font-family: var(--paper-font-body1_-_font-family, sans-serif);
+        }
+        * { box-sizing: border-box; }
+        main { max-width: 960px; margin: 0 auto; padding: 30px 24px 56px; }
+        header { position: relative; display: flex; align-items: center; gap: 16px; margin-bottom: 25px; }
+        .hero-icon { display: grid; width: 54px; height: 54px; flex: 0 0 54px; place-items: center; border-radius: 17px; color: var(--schedule-accent); background: color-mix(in srgb, var(--schedule-accent) 13%, var(--schedule-card)); }
+        .hero-icon svg { width: 29px; height: 29px; }
+        h1 { margin: 0; font-size: clamp(1.55rem, 3vw, 2rem); font-weight: 650; letter-spacing: -.035em; }
+        .intro { margin: 5px 0 0; color: var(--secondary-text-color); font-size: .98rem; }
         .menu { display: none; }
         .menu:not([hidden]) { display: inline-block; }
-        h2 { font-size: 1.15rem; margin: 0 0 14px; }
-        .toolbar, .copy-row, .actions, .row { display: flex; align-items: center; gap: 12px; }
-        .toolbar { flex-wrap: wrap; margin-bottom: 20px; }
-        .toolbar label { display: flex; flex-direction: column; gap: 5px; font-size: .9rem; }
-        select, input, button { font: inherit; }
-        select, input { box-sizing: border-box; min-height: 40px; padding: 7px 10px; border: 1px solid var(--divider-color); border-radius: 6px; color: var(--primary-text-color); background: var(--card-background-color, var(--primary-background-color)); }
-        button { min-height: 40px; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; color: var(--text-primary-color, #fff); background: var(--primary-color); }
-        button.secondary { color: var(--primary-text-color); background: var(--secondary-background-color); }
-        button.danger { color: var(--error-color, #b3261e); background: transparent; }
-        button:disabled { opacity: .5; cursor: default; }
-        .status { min-height: 24px; margin: 8px 0; color: var(--success-color, #26734d); }
-        .status.error { color: var(--error-color, #b3261e); }
-        .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
-        .tabs button { color: var(--primary-text-color); background: var(--secondary-background-color); }
-        .tabs button.selected { color: var(--text-primary-color, #fff); background: var(--primary-color); }
-        .card { margin: 18px 0; padding: 20px; border: 1px solid var(--divider-color); border-radius: 10px; background: var(--card-background-color, var(--primary-background-color)); }
-        .row { flex-wrap: wrap; margin: 10px 0; }
-        .row input[type="time"] { width: 140px; }
-        .row input[type="number"] { width: 130px; }
-        .copy-row { flex-wrap: wrap; }
-        .copy-row select { min-width: 150px; }
-        .enabled { display: flex; align-items: center; gap: 9px; }
-        .enabled input { width: 20px; height: 20px; accent-color: var(--primary-color); }
-        .chart { width: 100%; height: auto; overflow: visible; }
+        h2 { margin: 0; font-size: 1.2rem; font-weight: 620; letter-spacing: -.015em; }
+        p { line-height: 1.55; }
+        button, select, input { font: inherit; }
+        button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 11px; padding: 9px 16px; color: var(--text-primary-color, #fff); background: var(--schedule-accent); font-weight: 600; cursor: pointer; transition: filter .15s ease, transform .15s ease, background .15s ease; }
+        button:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+        button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid color-mix(in srgb, var(--schedule-accent) 45%, transparent); outline-offset: 2px; }
+        button.secondary { color: var(--primary-text-color); background: var(--schedule-soft); }
+        button.danger { min-height: 38px; padding: 7px 11px; color: var(--secondary-text-color); background: transparent; }
+        button.danger:hover:not(:disabled) { color: var(--error-color, #b3261e); background: var(--schedule-soft); }
+        button:disabled { opacity: .48; cursor: default; transform: none; }
+        select, input { min-height: 44px; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 12px; color: var(--primary-text-color); background: var(--schedule-card); }
+        select { cursor: pointer; }
+        .device-card, .card { border: 1px solid var(--divider-color); border-radius: 18px; background: var(--schedule-card); box-shadow: 0 3px 14px rgba(0, 0, 0, .035); }
+        .device-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; }
+        .device-picker { display: grid; min-width: min(100%, 360px); gap: 6px; }
+        .current-target { display: flex; align-items: baseline; gap: 7px; color: var(--secondary-text-color); font-size: .82rem; }
+        .current-target strong { color: var(--primary-text-color); font-size: .95rem; font-weight: 650; }
+        .field-label { color: var(--secondary-text-color); font-size: .8rem; font-weight: 650; letter-spacing: .045em; text-transform: uppercase; }
+        .device-picker select { width: 100%; font-size: 1rem; font-weight: 550; }
+        .enabled { display: inline-flex; align-items: center; gap: 11px; cursor: pointer; }
+        .enabled input { position: relative; width: 48px; height: 28px; min-height: 0; flex: 0 0 48px; margin: 0; appearance: none; border: 0; border-radius: 99px; padding: 3px; background: var(--disabled-color, #929292); cursor: pointer; transition: background .2s ease; }
+        .enabled input::before { display: block; width: 22px; height: 22px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0,0,0,.22); content: ""; transition: transform .2s ease; }
+        .enabled input:checked { background: var(--schedule-accent); }
+        .enabled input:checked::before { transform: translateX(20px); }
+        .enabled input:focus-visible { outline: 3px solid color-mix(in srgb, var(--schedule-accent) 45%, transparent); outline-offset: 2px; }
+        .enabled-copy { display: grid; gap: 3px; }
+        .enabled-copy strong { font-size: .95rem; font-weight: 620; }
+        .enabled-copy span { color: var(--secondary-text-color); font-size: .82rem; }
+        .status { min-height: 0; margin: 0; color: var(--success-color, #26734d); }
+        .status:not(:empty) { margin-top: 12px; padding: 11px 14px; border: 1px solid color-mix(in srgb, var(--success-color, #26734d) 24%, transparent); border-radius: 11px; background: color-mix(in srgb, var(--success-color, #26734d) 8%, var(--schedule-card)); }
+        .status.error:not(:empty) { color: var(--error-color, #b3261e); border-color: color-mix(in srgb, var(--error-color, #b3261e) 24%, transparent); background: color-mix(in srgb, var(--error-color, #b3261e) 7%, var(--schedule-card)); }
+        .tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin: 22px 0 15px; }
+        .tabs button { min-height: 62px; flex-direction: column; gap: 3px; border: 1px solid transparent; border-radius: 13px; padding: 7px 4px; color: var(--secondary-text-color); background: transparent; }
+        .tabs button:hover:not(:disabled) { color: var(--primary-text-color); background: var(--schedule-soft); transform: none; }
+        .tabs button.selected { border-color: color-mix(in srgb, var(--schedule-accent) 28%, transparent); color: var(--schedule-accent); background: color-mix(in srgb, var(--schedule-accent) 10%, var(--schedule-card)); }
+        .day-name { font-size: .9rem; font-weight: 650; }
+        .day-count { min-height: 17px; color: var(--secondary-text-color); font-size: .72rem; }
+        .tabs button.selected .day-count { color: var(--schedule-accent); }
+        .card { margin: 15px 0; padding: 22px 24px; }
+        .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+        .section-head p { margin: 5px 0 0; color: var(--secondary-text-color); }
+        .day-summary { flex: 0 0 auto; border-radius: 99px; padding: 6px 10px; color: var(--schedule-accent); background: color-mix(in srgb, var(--schedule-accent) 10%, var(--schedule-card)); font-size: .82rem; font-weight: 600; }
+        .rows { display: grid; gap: 10px; margin: 21px 0 17px; }
+        .row { display: grid; grid-template-columns: minmax(145px, 1fr) 30px minmax(185px, 1.2fr) auto; align-items: center; gap: 12px; border: 1px solid var(--divider-color); border-radius: 14px; padding: 10px 12px; background: color-mix(in srgb, var(--schedule-soft) 52%, var(--schedule-card)); }
+        .row label { display: grid; gap: 5px; color: var(--secondary-text-color); font-size: .78rem; font-weight: 600; }
+        .row input { width: 100%; min-height: 42px; color: var(--primary-text-color); font-size: 1.02rem; font-weight: 650; }
+        .row input[type="time"] { font-variant-numeric: tabular-nums; }
+        .temperature-input { display: flex; align-items: center; gap: 8px; }
+        .temperature-input input { min-width: 0; flex: 1; }
+        .row input[type="number"] { max-width: 142px; }
+        .row-arrow { color: var(--secondary-text-color); text-align: center; font-size: 1.15rem; }
+        .row-unit { margin-left: -5px; color: var(--secondary-text-color); font-size: .9rem; }
+        .empty-day { display: flex; align-items: flex-start; gap: 14px; margin: 20px 0 15px; border: 1px dashed color-mix(in srgb, var(--schedule-accent) 35%, var(--divider-color)); border-radius: 14px; padding: 16px; background: color-mix(in srgb, var(--schedule-accent) 5%, var(--schedule-card)); }
+        .empty-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 12px; color: var(--schedule-accent); background: color-mix(in srgb, var(--schedule-accent) 13%, var(--schedule-card)); font-size: 1.15rem; }
+        .empty-day p { margin: 0; }
+        .empty-hint { margin-top: 4px !important; color: var(--secondary-text-color); font-size: .88rem; }
+        .editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+        .copy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 19px; border-top: 1px solid var(--divider-color); padding-top: 17px; }
+        .copy-row label { color: var(--secondary-text-color); font-size: .9rem; }
+        .copy-row select { min-width: 160px; }
+        .save-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; border-top: 1px solid var(--divider-color); padding-top: 17px; }
+        .save-row .save-note { flex: 1; color: var(--secondary-text-color); font-size: .87rem; }
+        .chart-card { overflow: hidden; }
+        .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .chart-head p { margin: 5px 0 0; color: var(--secondary-text-color); }
+        .preview-badge { border-radius: 99px; padding: 6px 10px; color: var(--secondary-text-color); background: var(--schedule-soft); font-size: .75rem; font-weight: 650; }
+        .chart-wrap { margin-top: 16px; border-radius: 12px; padding: 10px 8px 0; background: color-mix(in srgb, var(--schedule-soft) 45%, var(--schedule-card)); }
+        .chart { display: block; width: 100%; height: auto; overflow: visible; }
         .chart text { fill: var(--secondary-text-color); font-size: 12px; }
-        .chart .grid { stroke: var(--divider-color); stroke-width: 1; }
-        .chart .step { fill: none; stroke: var(--primary-color); stroke-width: 4; stroke-linejoin: round; }
+        .chart .grid { stroke: var(--divider-color); stroke-width: 1; stroke-dasharray: 4 5; }
+        .chart .step { fill: none; stroke: var(--schedule-accent); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
         .muted { color: var(--secondary-text-color); }
-        @media (max-width: 600px) {
+        @media (max-width: 680px) {
           main { padding: 20px 14px 36px; }
-          .card { padding: 15px; }
-          .row { align-items: flex-start; }
+          .device-card { align-items: flex-start; flex-direction: column; gap: 15px; padding: 16px; }
+          .device-picker { width: 100%; }
+          .enabled { align-self: stretch; }
+          .tabs { gap: 3px; }
+          .tabs button { min-height: 56px; }
+          .day-name { font-size: .78rem; }
+          .card { padding: 17px 15px; }
+          .row { grid-template-columns: minmax(105px, 1fr) 20px minmax(120px, 1fr) auto; gap: 7px; padding: 9px; }
+          .row label { font-size: .72rem; }
+          .row input { padding: 7px; font-size: .95rem; }
+          .row input[type="number"] { max-width: 110px; }
+          .row-unit { font-size: .8rem; }
+          .row .danger { padding: 5px; font-size: .78rem; }
+          .row-arrow { font-size: .95rem; }
+          .copy-row select { flex: 1; }
+          .save-row .save-note { flex-basis: 100%; }
+        }
+        @media (max-width: 390px) {
+          .hero-icon { width: 44px; height: 44px; flex-basis: 44px; border-radius: 14px; }
+          .tabs button { padding-inline: 1px; }
+          .day-name { font-size: .71rem; }
+          .day-count { font-size: .66rem; }
+          .row { grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+          .row-arrow { display: none; }
+          .row label:first-child { grid-column: 1; grid-row: 1; }
+          .row label:nth-of-type(2) { grid-column: 1; grid-row: 2; }
+          .row .danger { grid-column: 2; grid-row: 1 / 3; align-self: center; }
         }
       </style>
       <main>
         <header>
           <button id="menu" class="menu secondary" type="button" aria-label="${this._t("openMenu")}" hidden>${this._t("menu")}</button>
-          <h1>${this._t("title")}</h1>
+          <div class="hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/><path d="M12 7v2m-1 1a2 2 0 0 0 2 0m-2 2a2 2 0 0 0 2 0"/></svg>
+          </div>
+          <div><h1>${this._t("title")}</h1><p class="intro">${this._t("intro")}</p></div>
         </header>
-        <div class="toolbar">
-          <label>${this._t("thermostat")}<select id="entity"></select></label>
-          <label class="enabled"><input id="enabled" type="checkbox"><span>${this._t("scheduleEnabled")}</span></label>
-        </div>
+        <section class="device-card" aria-label="${this._t("thermostat")}">
+          <label class="device-picker"><span class="field-label">${this._t("thermostat")}</span><select id="entity"></select><span class="current-target"><span id="current-target-label"></span><strong id="current-target-value"></strong></span></label>
+          <label class="enabled"><input id="enabled" type="checkbox"><span class="enabled-copy"><strong id="enabled-title"></strong><span id="enabled-subtitle"></span></span></label>
+        </section>
         <div id="status" class="status" role="status" aria-live="polite"></div>
         <nav id="days" class="tabs" aria-label="${this._t("weekday")}"></nav>
         <section class="card">
-          <h2 id="day-title"></h2>
-          <p class="muted">${this._t("addTimes")}</p>
-          <div id="rows"></div>
-          <div class="actions">
-            <button id="add" class="secondary" type="button">${this._t("addChange")}</button>
+          <div class="section-head">
+            <div><h2 id="day-title"></h2><p>${this._t("addTimes")}</p></div>
+            <span id="day-summary" class="day-summary"></span>
           </div>
-          <div class="copy-row" style="margin-top: 20px">
+          <div id="rows" class="rows"></div>
+          <div class="editor-actions">
+            <button id="add" class="secondary" type="button"><span aria-hidden="true">＋</span>${this._t("addChange")}</button>
+          </div>
+          <div class="copy-row">
             <label for="copy-target">${this._t("copyTo")}</label>
             <select id="copy-target"></select>
             <button id="copy" class="secondary" type="button">${this._t("copyDay")}</button>
           </div>
-          <div class="actions" style="margin-top: 20px">
+          <div class="save-row">
+            <span id="save-note" class="save-note"></span>
             <button id="save" type="button" disabled>${this._t("save")}</button>
             <button id="discard" class="secondary" type="button" disabled>${this._t("discard")}</button>
           </div>
         </section>
-        <section class="card">
-          <h2>${this._t("chartTitle")}</h2>
-          <p class="muted">${this._t("chartDescription")}</p>
-          <svg id="chart" class="chart" viewBox="0 0 720 240" role="img" aria-label="${this._t("chartLabel")}"></svg>
+        <section class="card chart-card">
+          <div class="chart-head"><div><h2>${this._t("chartTitle")}</h2><p>${this._t("chartDescription")}</p></div><span class="preview-badge">${this._t("preview")}</span></div>
+          <div class="chart-wrap"><svg id="chart" class="chart" viewBox="0 0 720 240" role="img" aria-label="${this._t("chartLabel")}"></svg></div>
           <p id="chart-empty" class="muted"></p>
         </section>
       </main>`;
@@ -287,34 +405,63 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     });
     entitySelect.value = this._selectedEntity || "";
     entitySelect.disabled = Object.keys(entities).length === 0;
+    const targetTemperature =
+      this._hass.states[this._selectedEntity]?.attributes?.temperature;
+    this.shadowRoot.getElementById("current-target-label").textContent =
+      this._t("currentTarget");
+    this.shadowRoot.getElementById("current-target-value").textContent =
+      typeof targetTemperature === "number"
+        ? `${targetTemperature} ${this._entityAttribute("temperature_unit", "°C")}`
+        : this._t("temperatureUnavailable");
 
     const schedule = entities[this._selectedEntity];
     const enabled = this.shadowRoot.getElementById("enabled");
     enabled.checked = schedule?.enabled || false;
     enabled.disabled = !schedule;
+    this.shadowRoot.getElementById("enabled-title").textContent = this._t(
+      schedule?.enabled ? "scheduleOn" : "scheduleOff",
+    );
+    this.shadowRoot.getElementById("enabled-subtitle").textContent = this._t(
+      schedule?.enabled ? "manualOverrideHint" : "pausedHint",
+    );
 
     const daysNav = this.shadowRoot.getElementById("days");
     daysNav.replaceChildren();
     this._weekdays.forEach((day, index) => {
+      const count = this._draftDays?.[index]?.length || 0;
+      const countLabel = this._countLabel(count);
       const button = document.createElement("button");
       button.type = "button";
       button.className = index === this._selectedDay ? "selected" : "";
-      button.textContent = day;
+      button.innerHTML = `<span class="day-name"></span><span class="day-count"></span>`;
+      button.querySelector(".day-name").textContent = this._shortWeekdays[index];
+      button.querySelector(".day-count").textContent =
+        count === 0 ? "—" : String(count);
+      button.setAttribute("aria-label", `${day}, ${countLabel}`);
+      button.setAttribute(
+        "aria-pressed",
+        index === this._selectedDay ? "true" : "false",
+      );
       button.dataset.day = index;
       daysNav.append(button);
     });
 
     const dayName = this._weekdays[this._selectedDay];
     this.shadowRoot.getElementById("day-title").textContent = dayName;
+    const dayCount = this._draftDays?.[this._selectedDay]?.length || 0;
+    this.shadowRoot.getElementById("day-summary").textContent =
+      this._countLabel(dayCount);
     const rows = this.shadowRoot.getElementById("rows");
     rows.replaceChildren();
     (this._draftDays?.[this._selectedDay] || []).forEach((row, index) => {
       rows.append(this._createRow(row, index));
     });
     if ((this._draftDays?.[this._selectedDay] || []).length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "muted";
-      empty.textContent = this._t("emptyDay");
+      const empty = document.createElement("div");
+      empty.className = "empty-day";
+      empty.innerHTML = `<span class="empty-icon" aria-hidden="true">＋</span><div><p></p><p class="empty-hint"></p></div>`;
+      empty.querySelector("p").textContent = this._t("emptyDay");
+      empty.querySelector(".empty-hint").textContent = this._t("emptyHint");
       rows.append(empty);
     }
 
@@ -331,8 +478,12 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     });
     copyTarget.disabled = !schedule;
     this.shadowRoot.getElementById("add").disabled = !schedule;
+    this.shadowRoot.getElementById("copy").disabled = !schedule;
     this.shadowRoot.getElementById("save").disabled = !schedule || !this._dirty;
     this.shadowRoot.getElementById("discard").disabled = !this._dirty;
+    this.shadowRoot.getElementById("save-note").textContent = this._t(
+      this._dirty ? "unsavedState" : "savedState",
+    );
     this._renderChart();
   }
 
@@ -352,6 +503,8 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
 
     const temperatureLabel = document.createElement("label");
     temperatureLabel.textContent = this._t("setTo");
+    const temperatureInput = document.createElement("span");
+    temperatureInput.className = "temperature-input";
     const temperature = document.createElement("input");
     temperature.type = "number";
     temperature.step = this._entityAttribute("target_temp_step", 0.5);
@@ -360,19 +513,29 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     temperature.value = row.temperature;
     temperature.required = true;
     temperature.dataset.field = "temperature";
-    temperatureLabel.append(temperature);
+    temperatureInput.append(temperature);
 
     const unit = document.createElement("span");
+    unit.className = "row-unit";
     unit.textContent = this._entityAttribute("temperature_unit", "°C");
+    temperatureInput.append(unit);
+    temperatureLabel.append(temperatureInput);
+    const arrow = document.createElement("span");
+    arrow.className = "row-arrow";
+    arrow.setAttribute("aria-hidden", "true");
+    arrow.textContent = "→";
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "danger";
     remove.textContent = this._t("remove");
     remove.dataset.remove = index;
-    remove.setAttribute("aria-label", `Remove change at ${row.time}`);
+    remove.setAttribute(
+      "aria-label",
+      this._t("removeChange", { time: row.time }),
+    );
 
-    wrapper.append(timeLabel, temperatureLabel, unit, remove);
+    wrapper.append(timeLabel, arrow, temperatureLabel, remove);
     return wrapper;
   }
 
@@ -380,6 +543,11 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     return (
       this._hass.states[this._selectedEntity]?.attributes?.[name] ?? fallback
     );
+  }
+
+  _countLabel(count) {
+    const key = count === 1 ? "changeCount" : "changesCount";
+    return this._t(key, { count: String(count) });
   }
 
   _renderChart() {
@@ -448,7 +616,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
       const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
       label.setAttribute("x", 4);
       label.setAttribute("y", lineY + 4);
-      label.textContent = `${(high - fraction * (high - low)).toFixed(1)}°`;
+      label.textContent = `${(high - fraction * (high - low)).toFixed(1)} ${this._entityAttribute("temperature_unit", "°C")}`;
       svg.append(label);
     });
 
@@ -474,7 +642,10 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
   }
 
   _handleClick(event) {
-    const target = event.target;
+    const target = event.target.closest("button");
+    if (!target) {
+      return;
+    }
     if (target.id === "menu") {
       this.dispatchEvent(
         new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }),
