@@ -11,9 +11,15 @@ const PANEL_TRANSLATIONS = {
     manualOverrideHint: "Manual changes last until the next scheduled change",
     pausedHint: "The current temperature is left unchanged while paused",
     globalSchedules: "All heating schedules",
-    globalEnabled: "Enabled",
-    globalPaused: "Paused",
-    globalDescription: "Turn all schedules on or pause them together",
+    globalMode: "Heating mode",
+    modeOn: "On",
+    modeAway: "Away",
+    modeOff: "Off",
+    modeOnDescription: "Heating schedules operate normally",
+    modeAwayDescription: "Schedules are paused and idle temperatures are used",
+    modeOffDescription: "Heating schedules are disabled",
+    awayTemperature: "Away temperature",
+    awayTemperatureHint: "Idle temperature while Away mode is active",
     currentTarget: "Current target",
     temperatureUnavailable: "Temperature unavailable",
     weekday: "Weekday",
@@ -82,9 +88,15 @@ const PANEL_TRANSLATIONS = {
     manualOverrideHint: "Manuelle Änderungen gelten bis zur nächsten geplanten Änderung",
     pausedHint: "Während der Pause bleibt die aktuelle Temperatur unverändert",
     globalSchedules: "Alle Heizpläne",
-    globalEnabled: "Aktiv",
-    globalPaused: "Pausiert",
-    globalDescription: "Aktiviere alle Zeitpläne zusammen oder pausiere sie",
+    globalMode: "Heizmodus",
+    modeOn: "An",
+    modeAway: "Abwesend",
+    modeOff: "Aus",
+    modeOnDescription: "Heizpläne laufen normal",
+    modeAwayDescription: "Zeitpläne sind pausiert und Ruhetemperaturen werden verwendet",
+    modeOffDescription: "Heizpläne sind deaktiviert",
+    awayTemperature: "Ruhetemperatur",
+    awayTemperatureHint: "Zieltemperatur, während der Modus „Abwesend“ aktiv ist",
     currentTarget: "Aktuelle Zieltemperatur",
     temperatureUnavailable: "Temperatur nicht verfügbar",
     weekday: "Wochentag",
@@ -278,6 +290,11 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         .global-copy { display: grid; gap: 2px; }
         .global-copy strong { font-size: .95rem; }
         .global-copy span { color: var(--secondary-text-color); font-size: .82rem; }
+        .mode-control { display: grid; gap: 5px; }
+        .mode-control select { min-width: 150px; }
+        .away-temperature { display: grid; margin-top: 10px; gap: 5px; }
+        .away-temperature-row { display: flex; align-items: center; gap: 8px; }
+        .away-temperature input { width: 110px; }
         .device-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; }
         .device-picker { display: grid; min-width: min(100%, 360px); gap: 6px; }
         .current-target { display: flex; align-items: baseline; gap: 7px; color: var(--secondary-text-color); font-size: .82rem; }
@@ -340,7 +357,7 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
         .preview-badge { border-radius: 99px; padding: 6px 10px; color: var(--secondary-text-color); background: var(--schedule-soft); font-size: .75rem; font-weight: 650; }
         .chart-wrap { margin-top: 16px; border-radius: 12px; padding: 10px 8px 0; background: color-mix(in srgb, var(--schedule-soft) 45%, var(--schedule-card)); }
         .chart { display: block; width: 100%; height: auto; overflow: visible; }
-        .chart text { fill: var(--secondary-text-color); font-size: 12px; }
+        .chart text { fill: var(--secondary-text-color); font-size: 16px; font-weight: 600; }
         .chart .grid { stroke: var(--divider-color); stroke-width: 1; stroke-dasharray: 4 5; }
         .chart .step { fill: none; stroke: var(--schedule-accent); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
         .muted { color: var(--secondary-text-color); }
@@ -365,12 +382,15 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
           .row-arrow { font-size: .95rem; }
           .copy-row select { flex: 1; }
           .save-row .save-note { flex-basis: 100%; }
+          .chart text { font-size: 36px; }
+          .chart-wrap { padding: 14px 4px 2px; }
         }
         @media (max-width: 390px) {
           .hero-icon { width: 44px; height: 44px; flex-basis: 44px; border-radius: 14px; }
           .tabs button { padding-inline: 1px; }
           .day-name { font-size: .71rem; }
           .day-count { font-size: .66rem; }
+          .chart text { font-size: 36px; }
           .row { grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
           .row-arrow { display: none; }
           .row label:first-child { grid-column: 1; grid-row: 1; }
@@ -387,11 +407,18 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
           <div><h1>${this._t("title")}</h1><p class="intro">${this._t("intro")}</p></div>
         </header>
         <section class="global-control" aria-label="${this._t("globalSchedules")}">
-          <span class="global-copy"><strong>${this._t("globalSchedules")}</strong><span>${this._t("globalDescription")}</span></span>
-          <label class="enabled"><input id="global-enabled" type="checkbox"><span class="enabled-copy"><strong id="global-enabled-title"></strong></span></label>
+          <span class="global-copy"><strong>${this._t("globalSchedules")}</strong><span id="global-mode-description"></span></span>
+          <label class="mode-control"><span class="field-label">${this._t("globalMode")}</span>
+            <select id="global-mode">
+              <option value="on">${this._t("modeOn")}</option>
+              <option value="away">${this._t("modeAway")}</option>
+              <option value="off">${this._t("modeOff")}</option>
+            </select>
+          </label>
         </section>
         <section class="device-card" aria-label="${this._t("thermostat")}">
           <label class="device-picker"><span class="field-label">${this._t("thermostat")}</span><select id="entity"></select><span class="current-target"><span id="current-target-label"></span><strong id="current-target-value"></strong></span></label>
+          <label class="away-temperature"><span class="field-label">${this._t("awayTemperature")}</span><span class="away-temperature-row"><input id="away-temperature" type="number" step="0.5"><span id="away-temperature-unit"></span></span><span id="away-temperature-hint" class="muted"></span></label>
           <label class="enabled"><input id="enabled" type="checkbox"><span class="enabled-copy"><strong id="enabled-title"></strong><span id="enabled-subtitle"></span></span></label>
         </section>
         <div id="status" class="status" role="status" aria-live="polite"></div>
@@ -458,12 +485,32 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     const schedule = entities[this._selectedEntity];
     const enabled = this.shadowRoot.getElementById("enabled");
     enabled.checked = schedule?.enabled || false;
-    enabled.disabled = !schedule || !this._state.global_enabled;
-    const globalEnabled = this.shadowRoot.getElementById("global-enabled");
-    globalEnabled.checked = this._state.global_enabled !== false;
-    this.shadowRoot.getElementById("global-enabled-title").textContent = this._t(
-      globalEnabled.checked ? "globalEnabled" : "globalPaused",
+    enabled.disabled = !schedule || this._state.global_mode !== "on";
+
+    const globalMode = this._state.global_mode || "on";
+    this.shadowRoot.getElementById("global-mode").value = globalMode;
+    this.shadowRoot.getElementById("global-mode-description").textContent = this._t(
+      globalMode === "away"
+        ? "modeAwayDescription"
+        : globalMode === "off"
+          ? "modeOffDescription"
+          : "modeOnDescription",
     );
+
+    const awayTemperature = this.shadowRoot.getElementById("away-temperature");
+    awayTemperature.value =
+      schedule?.away_temperature === null ||
+      schedule?.away_temperature === undefined
+        ? ""
+        : schedule.away_temperature;
+    awayTemperature.disabled = !schedule;
+    awayTemperature.min = this._entityAttribute("min_temp", 7);
+    awayTemperature.max = this._entityAttribute("max_temp", 35);
+    awayTemperature.step = this._entityAttribute("target_temp_step", 0.5);
+    this.shadowRoot.getElementById("away-temperature-unit").textContent =
+      this._entityAttribute("temperature_unit", "°C");
+    this.shadowRoot.getElementById("away-temperature-hint").textContent =
+      this._t("awayTemperatureHint");
     this.shadowRoot.getElementById("enabled-title").textContent = this._t(
       schedule?.enabled ? "scheduleOn" : "scheduleOff",
     );
@@ -789,8 +836,12 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
 
   _handleChange(event) {
     const target = event.target;
-    if (target.id === "global-enabled") {
-      this._setGlobalEnabled(target.checked);
+    if (target.id === "global-mode") {
+      this._setGlobalMode(target.value);
+      return;
+    }
+    if (target.id === "away-temperature") {
+      this._setAwayTemperature(target.value);
       return;
     }
     if (target.id === "entity") {
@@ -907,22 +958,48 @@ class SimpleHeatingSchedulePanel extends HTMLElement {
     }
   }
 
-  async _setGlobalEnabled(enabled) {
+  async _setGlobalMode(mode) {
     try {
       const result = await this._hass.callWS({
-        type: "simple_heating_schedule/set_global_enabled",
-        enabled,
+        type: "simple_heating_schedule/set_global_mode",
+        mode,
       });
       this._state = result;
       this._showStatus(
         result.warning
           ? this._backendMessage(result.warning)
-          : this._t(enabled ? "globalEnabled" : "globalPaused"),
+          : this._t(
+              mode === "away"
+                ? "modeAway"
+                : mode === "off"
+                  ? "modeOff"
+                  : "modeOn",
+            ),
         Boolean(result.warning),
       );
       this._render();
     } catch (error) {
       this._showStatus(this._backendMessage(error, "enableError"), true);
+      this._render();
+    }
+  }
+
+  async _setAwayTemperature(value) {
+    try {
+      const temperature = value === "" ? null : Number(value);
+      const result = await this._hass.callWS({
+        type: "simple_heating_schedule/set_away_temperature",
+        entity_id: this._selectedEntity,
+        temperature,
+      });
+      this._state = result;
+      this._showStatus(
+        result.warning ? this._backendMessage(result.warning) : this._t("saved"),
+        Boolean(result.warning),
+      );
+      this._render();
+    } catch (error) {
+      this._showStatus(this._backendMessage(error, "saveError"), true);
       this._render();
     }
   }

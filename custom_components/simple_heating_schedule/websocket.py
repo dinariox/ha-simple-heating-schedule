@@ -17,7 +17,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, websocket_get_schedules)
     websocket_api.async_register_command(hass, websocket_set_schedule)
     websocket_api.async_register_command(hass, websocket_set_enabled)
-    websocket_api.async_register_command(hass, websocket_set_global_enabled)
+    websocket_api.async_register_command(hass, websocket_set_global_mode)
+    websocket_api.async_register_command(hass, websocket_set_away_temperature)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/get"})
@@ -87,12 +88,12 @@ async def websocket_set_enabled(
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): f"{DOMAIN}/set_global_enabled",
-        vol.Required("enabled"): bool,
+        vol.Required("type"): f"{DOMAIN}/set_global_mode",
+        vol.Required("mode"): str,
     }
 )
 @websocket_api.async_response
-async def websocket_set_global_enabled(
+async def websocket_set_global_mode(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Enable or disable heating schedules globally."""
@@ -100,7 +101,35 @@ async def websocket_set_global_enabled(
     if manager is None:
         return
     try:
-        result = await manager.async_set_global_enabled(msg["enabled"])
+        result = await manager.async_set_global_mode(msg["mode"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_schedule", str(err))
+        return
+    except (HomeAssistantError, OSError) as err:
+        connection.send_error(msg["id"], "schedule_error", str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/set_away_temperature",
+        vol.Required("entity_id"): str,
+        vol.Optional("temperature", default=None): vol.Any(float, int, None),
+    }
+)
+@websocket_api.async_response
+async def websocket_set_away_temperature(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Set or clear one thermostat's idle temperature."""
+    manager = _get_manager(hass, connection, msg)
+    if manager is None:
+        return
+    try:
+        result = await manager.async_set_away_temperature(
+            msg["entity_id"], msg.get("temperature")
+        )
     except ValueError as err:
         connection.send_error(msg["id"], "invalid_schedule", str(err))
         return

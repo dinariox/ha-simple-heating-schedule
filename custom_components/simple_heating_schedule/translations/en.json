@@ -21,9 +21,14 @@
     }
   },
   "entity": {
-    "switch": {
-      "heating_schedules": {
-        "name": "Heating schedules"
+    "select": {
+      "heating_mode": {
+        "name": "Heating mode",
+        "state": {
+          "on": "On",
+          "away": "Away",
+          "off": "Off"
+        }
       }
     }
   }

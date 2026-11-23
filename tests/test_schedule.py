@@ -19,10 +19,19 @@ from schedule import (
     current_temperature,
     empty_days,
     normalize_days,
+    normalize_mode,
 )
 
 
 class ScheduleTests(unittest.TestCase):
+    def test_normalize_mode_accepts_supported_modes(self) -> None:
+        self.assertEqual(normalize_mode("on"), "on")
+        self.assertEqual(normalize_mode("away"), "away")
+        self.assertEqual(normalize_mode("off"), "off")
+
+    def test_normalize_mode_rejects_unknown_mode(self) -> None:
+        with self.assertRaisesRegex(ValueError, "on, away, or off"):
+            normalize_mode("vacation")
     def test_normalize_sorts_changes_and_converts_temperature(self) -> None:
         days = empty_days()
         days["0"] = [

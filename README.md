@@ -10,7 +10,8 @@ A Home Assistant custom integration for managing a weekly heating schedule for e
 - View a read-only graph of the day's setpoints.
 - Manual thermostat adjustments remain in effect until the next scheduled change.
 - Disabling a schedule stops scheduled commands without changing the current thermostat setpoint.
-- A global **Heating schedules** switch disables or enables all thermostat schedules together from dashboards and automations.
+- A global **Heating mode** select provides **On**, **Away**, and **Off** modes for dashboards and automations.
+- **Away** applies a separate configurable idle temperature to each thermostat. **Off** leaves all thermostat temperatures unchanged.
 
 ## Installation
 

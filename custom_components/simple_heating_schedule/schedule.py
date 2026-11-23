@@ -7,11 +7,19 @@ from typing import Any
 
 _TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 _DAY_KEYS = {str(day) for day in range(7)}
+GLOBAL_MODES = {"on", "away", "off"}
 
 
 def empty_days() -> dict[str, list[dict[str, Any]]]:
     """Return an empty schedule for all weekdays."""
     return {str(day): [] for day in range(7)}
+
+
+def normalize_mode(mode: Any) -> str:
+    """Validate a global operating mode."""
+    if mode not in GLOBAL_MODES:
+        raise ValueError("Mode must be on, away, or off.")
+    return mode
 
 
 def normalize_days(raw_days: Any) -> dict[str, list[dict[str, Any]]]:

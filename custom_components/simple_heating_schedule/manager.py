@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import logging
+import math
 from typing import Any
 
 from homeassistant.components.climate import ClimateEntityFeature
@@ -13,8 +14,14 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_ENTITY_IDS, DOMAIN
-from .schedule import changes_at, current_temperature, empty_days, normalize_days
+from .const import CONF_ENTITY_IDS, DOMAIN, MODE_AWAY, MODE_OFF, MODE_ON
+from .schedule import (
+    changes_at,
+    current_temperature,
+    empty_days,
+    normalize_days,
+    normalize_mode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +34,7 @@ class ScheduleManager:
         self.entity_ids: list[str] = entry.data[CONF_ENTITY_IDS]
         self.store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}")
         self.schedules: dict[str, dict[str, Any]] = {}
-        self.global_enabled = True
+        self.global_mode = MODE_ON
         self._unsubscribe_time: Any = None
         self._switch_entities: list[Any] = []
 
@@ -40,23 +47,44 @@ class ScheduleManager:
         stored_entities = saved.get("entities", {}) if saved is not None else {}
         if not isinstance(stored_entities, dict):
             raise HomeAssistantError("Stored heating schedules have an invalid format.")
-        global_enabled = saved.get("global_enabled", True) if saved is not None else True
-        if not isinstance(global_enabled, bool):
-            raise HomeAssistantError("The stored global schedule state is invalid.")
-        self.global_enabled = global_enabled
+        try:
+            if saved and "global_mode" in saved:
+                global_mode = normalize_mode(saved["global_mode"])
+            elif saved and isinstance(saved.get("global_enabled"), bool):
+                global_mode = MODE_ON if saved["global_enabled"] else MODE_OFF
+            else:
+                global_mode = MODE_ON
+        except ValueError as err:
+            raise HomeAssistantError("The stored global mode is invalid.") from err
+        self.global_mode = global_mode
 
         for entity_id in self.entity_ids:
             stored = stored_entities.get(entity_id)
             if stored is None:
-                self.schedules[entity_id] = {"enabled": True, "days": empty_days()}
+                self.schedules[entity_id] = {
+                    "enabled": True,
+                    "away_temperature": None,
+                    "days": empty_days(),
+                }
                 continue
             try:
                 if not isinstance(stored, dict) or not isinstance(stored.get("enabled"), bool):
                     raise ValueError("Invalid enabled state.")
                 self.schedules[entity_id] = {
                     "enabled": stored["enabled"],
+                    "away_temperature": stored.get("away_temperature"),
                     "days": normalize_days(stored.get("days")),
                 }
+                away_temperature = self.schedules[entity_id]["away_temperature"]
+                if away_temperature is not None:
+                    if isinstance(away_temperature, bool) or not isinstance(
+                        away_temperature, (int, float)
+                    ):
+                        raise ValueError("Away temperature must be numeric.")
+                    away_temperature = float(away_temperature)
+                    if not math.isfinite(away_temperature):
+                        raise ValueError("Away temperature must be finite.")
+                    self.schedules[entity_id]["away_temperature"] = away_temperature
             except ValueError as err:
                 raise HomeAssistantError(
                     f"Stored schedule for {entity_id} is invalid: {err}"
@@ -93,10 +121,11 @@ class ScheduleManager:
     async def async_get_state(self) -> dict[str, Any]:
         """Return a copy of all schedules for the panel."""
         return {
-            "global_enabled": self.global_enabled,
+            "global_mode": self.global_mode,
             "entities": {
                 entity_id: {
                     "enabled": schedule["enabled"],
+                    "away_temperature": schedule.get("away_temperature"),
                     "days": {
                         day: [dict(row) for row in rows]
                         for day, rows in schedule["days"].items()
@@ -122,7 +151,7 @@ class ScheduleManager:
             raise
 
         warning = None
-        if self.global_enabled and self.schedules[entity_id]["enabled"]:
+        if self.global_mode == MODE_ON and self.schedules[entity_id]["enabled"]:
             temperature = current_temperature(days, dt_util.now())
             if temperature is not None:
                 try:
@@ -147,7 +176,7 @@ class ScheduleManager:
             self.schedules[entity_id]["enabled"] = previous_enabled
             raise
         warning = None
-        if self.global_enabled and enabled:
+        if self.global_mode == MODE_ON and enabled:
             temperature = current_temperature(
                 self.schedules[entity_id]["days"], dt_util.now()
             )
@@ -158,21 +187,19 @@ class ScheduleManager:
                     warning = f"Schedule enabled, but the current setpoint could not be applied: {err}"
         return await self._state_with_warning(warning)
 
-    async def async_set_global_enabled(self, enabled: bool) -> dict[str, Any]:
-        """Enable or disable schedules globally."""
-        if not isinstance(enabled, bool):
-            raise ValueError("The enabled state must be true or false.")
-
-        previous_enabled = self.global_enabled
-        self.global_enabled = enabled
+    async def async_set_global_mode(self, mode: str) -> dict[str, Any]:
+        """Set global On, Away, or Off mode."""
+        mode = normalize_mode(mode)
+        previous_mode = self.global_mode
+        self.global_mode = mode
         try:
             await self._async_save()
         except (HomeAssistantError, OSError):
-            self.global_enabled = previous_enabled
+            self.global_mode = previous_mode
             raise
 
         warning = None
-        if enabled:
+        if mode == MODE_ON:
             now = dt_util.now()
             for entity_id, schedule in self.schedules.items():
                 if not schedule["enabled"]:
@@ -188,9 +215,97 @@ class ScheduleManager:
                         f"setpoint could not be applied: {err}"
                     )
                     break
+        elif mode == MODE_AWAY:
+            for entity_id, schedule in self.schedules.items():
+                temperature = schedule.get("away_temperature")
+                if temperature is None:
+                    continue
+                try:
+                    await self._async_apply_temperature(entity_id, float(temperature))
+                except HomeAssistantError as err:
+                    warning = (
+                        f"Away mode enabled, but {entity_id}'s idle setpoint "
+                        f"could not be applied: {err}"
+                    )
+                    break
 
         self._notify_switch_entities()
         return await self._state_with_warning(warning)
+
+    async def async_set_away_temperature(
+        self, entity_id: str, temperature: float | None
+    ) -> dict[str, Any]:
+        """Set or clear the idle temperature for one thermostat."""
+        self._require_entity(entity_id)
+        if temperature is None:
+            away_temperature = None
+        else:
+            if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+                raise ValueError("Away temperature must be numeric.")
+            away_temperature = float(temperature)
+            if not math.isfinite(away_temperature):
+                raise ValueError("Away temperature must be finite.")
+            self._validate_temperature(entity_id, away_temperature)
+
+        previous_temperature = self.schedules[entity_id].get("away_temperature")
+        self.schedules[entity_id]["away_temperature"] = away_temperature
+        try:
+            await self._async_save()
+        except (HomeAssistantError, OSError):
+            self.schedules[entity_id]["away_temperature"] = previous_temperature
+            raise
+
+        warning = None
+        if (
+            self.global_mode == MODE_AWAY
+            and away_temperature is not None
+        ):
+            try:
+                await self._async_apply_temperature(entity_id, away_temperature)
+            except HomeAssistantError as err:
+                warning = (
+                    f"Away temperature saved, but {entity_id}'s idle setpoint "
+                    f"could not be applied: {err}"
+                )
+        self._notify_switch_entities()
+        return await self._state_with_warning(warning)
+
+    async def _async_apply_away_temperatures(self) -> None:
+        for entity_id, schedule in self.schedules.items():
+            temperature = schedule.get("away_temperature")
+            if temperature is None:
+                continue
+            try:
+                await self._async_apply_temperature(entity_id, float(temperature))
+            except HomeAssistantError:
+                _LOGGER.exception(
+                    "Unable to apply the away temperature for %s", entity_id
+                )
+
+    def _validate_temperature(self, entity_id: str, temperature: float) -> None:
+        state = self.hass.states.get(entity_id)
+        minimum = (
+            state.attributes.get("min_temp", DEFAULT_MIN_TEMP)
+            if state is not None
+            else DEFAULT_MIN_TEMP
+        )
+        maximum = (
+            state.attributes.get("max_temp", DEFAULT_MAX_TEMP)
+            if state is not None
+            else DEFAULT_MAX_TEMP
+        )
+        minimum = DEFAULT_MIN_TEMP if minimum is None else float(minimum)
+        maximum = DEFAULT_MAX_TEMP if maximum is None else float(maximum)
+        if temperature < minimum:
+            raise ValueError(
+                f"{temperature:g}° is below {entity_id}'s minimum "
+                f"temperature of {minimum:g}°."
+            )
+        if temperature > maximum:
+            raise ValueError(
+                f"{temperature:g}° is above {entity_id}'s maximum "
+                f"temperature of {maximum:g}°."
+            )
 
     async def _state_with_warning(self, warning: str | None) -> dict[str, Any]:
         state = await self.async_get_state()
@@ -200,7 +315,7 @@ class ScheduleManager:
 
     async def _async_save(self) -> None:
         await self.store.async_save(
-            {"global_enabled": self.global_enabled, "entities": self.schedules}
+            {"global_mode": self.global_mode, "entities": self.schedules}
         )
 
     def _require_entity(self, entity_id: str) -> None:
@@ -261,7 +376,9 @@ class ScheduleManager:
         )
 
     async def _async_apply_current_schedules(self) -> None:
-        if not self.global_enabled:
+        if self.global_mode != MODE_ON:
+            if self.global_mode == MODE_AWAY:
+                await self._async_apply_away_temperatures()
             return
         now = dt_util.now()
         for entity_id, schedule in self.schedules.items():
@@ -277,7 +394,7 @@ class ScheduleManager:
 
     async def _async_handle_time_change(self, now: datetime) -> None:
         """Apply only changes scheduled for this minute."""
-        if not self.global_enabled:
+        if self.global_mode != MODE_ON:
             return
         for entity_id, schedule in self.schedules.items():
             if not schedule["enabled"]:

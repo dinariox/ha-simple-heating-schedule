@@ -21,9 +21,14 @@
     }
   },
   "entity": {
-    "switch": {
-      "heating_schedules": {
-        "name": "Heizpläne"
+    "select": {
+      "heating_mode": {
+        "name": "Heizmodus",
+        "state": {
+          "on": "An",
+          "away": "Abwesend",
+          "off": "Aus"
+        }
       }
     }
   }

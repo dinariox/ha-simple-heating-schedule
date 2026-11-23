@@ -17,3 +17,8 @@ WEEKDAYS = (
     "Saturday",
     "Sunday",
 )
+
+MODE_ON = "on"
+MODE_AWAY = "away"
+MODE_OFF = "off"
+GLOBAL_MODES = (MODE_ON, MODE_AWAY, MODE_OFF)

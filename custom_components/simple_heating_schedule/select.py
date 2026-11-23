@@ -4,7 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.select import SelectEntity
 
 from .const import DOMAIN
 from .manager import ScheduleManager
@@ -15,22 +15,22 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the global heating schedules switch."""
+    """Set up the global heating mode select."""
     manager: ScheduleManager = hass.data[DOMAIN]
-    async_add_entities([GlobalHeatingSchedulesSwitch(manager, entry)])
+    async_add_entities([GlobalHeatingModeSelect(manager, entry)])
 
 
-class GlobalHeatingSchedulesSwitch(SwitchEntity):
-    """Switch that enables or disables every heating schedule."""
+class GlobalHeatingModeSelect(SelectEntity):
+    """Select that chooses On, Away, or Off for every heating schedule."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:calendar-clock"
-    _attr_name = "Heating schedules"
-    _attr_translation_key = "heating_schedules"
+    _attr_translation_key = "heating_mode"
+    _attr_options = ["on", "away", "off"]
 
     def __init__(self, manager: ScheduleManager, entry: ConfigEntry) -> None:
         self._manager = manager
-        self._attr_unique_id = f"{entry.entry_id}_global_enabled"
+        self._attr_unique_id = f"{entry.entry_id}_global_mode"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="Simple Heating Schedule",
@@ -38,15 +38,13 @@ class GlobalHeatingSchedulesSwitch(SwitchEntity):
         )
 
     @property
-    def is_on(self) -> bool:
-        """Return whether all schedules are globally enabled."""
-        return self._manager.global_enabled
+    def current_option(self) -> str:
+        """Return the current global mode."""
+        return self._manager.global_mode
 
-    async def async_turn_on(self, **kwargs) -> None:
-        await self._manager.async_set_global_enabled(True)
-
-    async def async_turn_off(self, **kwargs) -> None:
-        await self._manager.async_set_global_enabled(False)
+    async def async_select_option(self, option: str) -> None:
+        """Select a global heating mode."""
+        await self._manager.async_set_global_mode(option.lower())
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
